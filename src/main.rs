@@ -64,7 +64,7 @@ fn main() -> Result<(), Error> {
 
     let base_dt = 0.005;
     let sub_steps = 8;
-    let objects_count = 2500;
+    let objects_count = 64000;
     let mut step = 0;
     let mut chunk_size = 32;
     let mut last_collision_resolve_duration = 0.0;
@@ -75,10 +75,10 @@ fn main() -> Result<(), Error> {
 
         objects.push(VerletObject {
             position: Point(position.0, position.1),
-            position_last: Point(position.0 - rnd.gen_range(-0.1..0.1), position.1 - rnd.gen_range(-0.1..0.1)),
+            position_last: Point(position.0 - rnd.gen_range(-0.25..0.25), position.1 - rnd.gen_range(-0.25..0.25)),
             acceleration: Point(0.0, 0.0),
-            mass: rnd.gen_range(20.0..90.0),
-            radius: rnd.gen_range(0.5..1.0),
+            mass: rnd.gen_range(10.0..90.0),
+            radius: rnd.gen_range(0.1..0.5),
             temp: 0.0,
         });
     }
@@ -150,7 +150,7 @@ fn main() -> Result<(), Error> {
             // Draw chunks
             for chunk in chunks.iter() {
                 let mut paint = Paint::default();
-                paint.set_color_rgba8(0, 0, 255, 35);
+                paint.set_color_rgba8(0, 0, 255, 15);
                 paint.anti_alias = false;
 
                 let rect_result = Rect::from_xywh(center_x + (chunk.x * chunk_size) as f32, center_y + (chunk.y * chunk_size) as f32, chunk_size as f32, chunk_size as f32);
@@ -160,7 +160,8 @@ fn main() -> Result<(), Error> {
             }
 
             // Draw objects
-            for object in objects.iter() {
+            let mut index = 0;
+            for object in objects.iter_mut() {
                 let mut paint = Paint::default();
                 paint.set_color_rgba8(object.temp as u8, 255 - object.temp as u8, object.temp as u8, 255);
                 paint.anti_alias = false;
@@ -169,7 +170,17 @@ fn main() -> Result<(), Error> {
 
                 if !rect_result.is_none() {
                     drawing.fill_rect(rect_result.unwrap(), &paint, Transform::identity(), None);
+                } else {
+                    println!("ERROR: Rect creating failed, see next lines");
+                    println!("INFO: Object data: i={}, x={}, y={}, t={}, r={}", index, object.position.0, object.position.1, object.temp, object.radius);
+                    println!("INFO: Calculated to Rect: x={}, y={}, w={}, h={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32, object.radius as f32);
+                    println!("INFO: Calculated in Rect: l={}, t={}, r={}, b={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32 + center_x + object.position.0 as f32, object.radius as f32 + center_y + object.position.1 as f32);
+
+                    *control_flow = ControlFlow::Exit;
+                    return;
                 }
+
+                index += 1;
             }
 
             // Save result to file
@@ -411,8 +422,19 @@ fn update_object(object: &mut VerletObject, dt: f64) {
     if object.temp < 0.0 {
         object.temp = 0.0;
     }
+    if object.temp > 1_000_000.0 {
+        object.temp = 1_000.0 ;
+    }
 
     object.acceleration = Point(0.0, 0.0);
+
+    // correct object position if it went crazy
+    if (object.position.0 as f32 == f32::INFINITY) || (object.position.1 as f32 == f32::INFINITY) || object.position.0.is_nan() || object.position.0.is_nan() {
+        object.position.0 = 0.0;
+        object.position.1 = 0.0;
+        object.position_last.0 = 0.0;
+        object.position_last.1 = 0.0;
+    }
 }
 
 struct Point(f64, f64);
