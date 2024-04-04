@@ -1,4 +1,4 @@
 /target
-output*
+output/*.png
 .DS_Store
 .vscode
