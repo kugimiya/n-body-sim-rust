@@ -4,62 +4,44 @@
 #![feature(get_many_mut)]
 
 mod sim_core;
-use sim_core::verlet_world::verlet_world::VerletWorld;
-
-use pixels::{Error, Pixels, SurfaceTexture};
+use sim_core::verlet_world::VerletWorld;
+use sim_core::render::{Renderer, draw};
 use winit::{
-    dpi::LogicalSize,
     event::{Event,VirtualKeyCode},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    event_loop::{EventLoop,ControlFlow},
 };
-use winit_input_helper::WinitInputHelper;
-use tiny_skia::{Pixmap, Paint, Rect, Transform};
 
-const WIDTH: u32 = 1920;
-const HEIGHT: u32 = 1080;
+const CANVAS_WIDTH: u32 = 1920;
+const CANVAS_HEIGHT: u32 = 1080;
 
-const WIDTH_RAND: f64 = 200.0;
-const HEIGHT_RAND: f64 = 200.0;
+const OBJECTS_COUNT: i32 = 1024;
+const SPAWN_WIDTH_BOUND: f64 = 200.0; // from -x to x
+const SPAWN_HEIGHT_BOUND: f64 = 200.0; // from -y to y
+const OBJECT_INIT_VELOCITY_BOUND: f64 = 0.25; // from -v to v
+const OBJECT_MASS_RANGE: std::ops::Range<f64> = 10.0..20.0;
+const OBJECT_RADIUS_RANGE: std::ops::Range<f64> = 1.0..2.0;
 
-fn main() -> Result<(), Error> {
-    let event_loop = EventLoop::new();
-    let mut input = WinitInputHelper::new();
+fn main() {
+    let mut event_loop = EventLoop::new();
+    let mut world = VerletWorld::new(OBJECTS_COUNT);
+    let mut renderer = Renderer::new(CANVAS_WIDTH, CANVAS_HEIGHT, &mut event_loop);
 
-    let window = {
-        let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
-        let scaled_size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
-        WindowBuilder::new()
-            .with_title("nbodysim-rust")
-            .with_inner_size(scaled_size)
-            .with_min_inner_size(size)
-            .build(&event_loop)
-            .unwrap()
-    };
-
-    let mut pixels = {
-        let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(WIDTH, HEIGHT, surface_texture)?
-    };
-    let mut drawing = Pixmap::new(WIDTH, HEIGHT).unwrap();
-
-    let mut world = VerletWorld::new(1024);
-    world.fill(WIDTH_RAND, HEIGHT_RAND, 0.25, 10.0..20.0, 1.0..2.0);
-
+    world.fill(SPAWN_WIDTH_BOUND, SPAWN_HEIGHT_BOUND, OBJECT_INIT_VELOCITY_BOUND, OBJECT_MASS_RANGE, OBJECT_RADIUS_RANGE);
     event_loop.run(move |event, _, control_flow| {
-        // Draw the current frame
+        // Loop iteration
         if let Event::RedrawRequested(_) = event {
-            pixels.frame_mut().copy_from_slice(drawing.data());
-            if let Err(err) = pixels.render() {
+            renderer.pixels.frame_mut().copy_from_slice(renderer.drawing.data());
+            if let Err(err) = renderer.pixels.render() {
+                println!("ERROR: {:?}", err);
                 *control_flow = ControlFlow::Exit;
                 return;
             }
         }
 
-        if input.update(&event) {
+        // Update event
+        if renderer.input.update(&event) {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.close_requested() {
+            if renderer.input.key_pressed(VirtualKeyCode::Escape) || renderer.input.close_requested() {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -67,66 +49,11 @@ fn main() -> Result<(), Error> {
             // Update world
             world.update();
 
-            // Fill all with black
-            {
-                let mut paint = Paint::default();
-                paint.set_color_rgba8(0, 0, 0, 55);
-                paint.anti_alias = false;
+            // Draw
+            draw(&mut renderer, &mut world);
 
-                let rect_result = Rect::from_xywh(0.0, 0.0, WIDTH as f32, HEIGHT as f32);
-                if !rect_result.is_none() {
-                    drawing.fill_rect(rect_result.unwrap(), &paint, Transform::identity(), None);
-                }
-            }
-
-            let center_x = (WIDTH / 2) as f32;
-            let center_y = (HEIGHT / 2) as f32;
-
-            // Draw chunks
-            for chunk in world.chunks.iter() {
-                let mut paint = Paint::default();
-                paint.set_color_rgba8(0, 0, 255, 15);
-                paint.anti_alias = false;
-
-                let rect_result = Rect::from_xywh(center_x + (chunk.x * world.chunk_size) as f32, center_y + (chunk.y * world.chunk_size) as f32, world.chunk_size as f32, world.chunk_size as f32);
-                if !rect_result.is_none() {
-                    drawing.fill_rect(rect_result.unwrap(), &paint, Transform::identity(), None);
-                }
-            }
-
-            // Draw objects
-            let mut index = 0;
-            for object in world.objects.iter_mut() {
-                let mut paint = Paint::default();
-                paint.set_color_rgba8(object.temp as u8, 255 - object.temp as u8, object.temp as u8, 255);
-                paint.anti_alias = false;
-
-                let rect_result = Rect::from_xywh(center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32, object.radius as f32);
-
-                if !rect_result.is_none() {
-                    drawing.fill_rect(rect_result.unwrap(), &paint, Transform::identity(), None);
-                } else {
-                    println!("ERROR: Rect creating failed, see next lines");
-                    println!("INFO: Object data: i={}, x={}, y={}, t={}, r={}", index, object.position.0, object.position.1, object.temp, object.radius);
-                    println!("INFO: Calculated to Rect: x={}, y={}, w={}, h={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32, object.radius as f32);
-                    println!("INFO: Calculated in Rect: l={}, t={}, r={}, b={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32 + center_x + object.position.0 as f32, object.radius as f32 + center_y + object.position.1 as f32);
-
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-
-                index += 1;
-            }
-
-            // Save result to file
-            let mut fname = "output/image_".to_owned();
-            fname.push_str(&format!("{:0>8}", world.step.to_string()));
-            fname.push_str(".png");
-
-            drawing.save_png(String::from(fname)).unwrap();
-
-            // Rerender
-            window.request_redraw();
+            // Re-render
+            renderer.window.request_redraw();
         }
-    });
+    }); 
 }
