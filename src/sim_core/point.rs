@@ -1,12 +1,9 @@
+#[derive(Copy, Clone)]
 pub struct Point(pub f64, pub f64);
 
 impl Point {
     pub fn new(x: f64, y: f64) -> Point {
         Point(x, y)
-    }
-
-    pub fn clone(&mut self) -> Point {
-        Point(self.0, self.1)
     }
 
     pub fn length_square(&mut self) -> f64 {
@@ -27,5 +24,9 @@ impl Point {
 
     pub fn divide(&mut self, v: f64) -> Point {
         return Point(self.0 / v, self.1 / v);
+    }
+
+    pub fn as_tupl(&mut self) -> (f64, f64) {
+        return (self.0, self.1);
     }
 }

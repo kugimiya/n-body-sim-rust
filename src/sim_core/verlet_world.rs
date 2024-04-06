@@ -1,4 +1,6 @@
 use rand::Rng;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use super::chunk::Chunk;
@@ -7,6 +9,7 @@ use super::verlet_object::VerletObject;
 
 pub struct VerletWorld {
     pub dt: f64,
+    pub gravity_const: f64,
     pub sub_steps: i32,
     pub objects_count: i32,
     pub step: i32,
@@ -23,6 +26,7 @@ impl VerletWorld {
     pub fn new(objects_count: i32) -> VerletWorld {
         VerletWorld {
             dt: 0.01,
+            gravity_const: 6.674,
             sub_steps: 8,
             objects_count: objects_count,
             chunk_size: 24,
@@ -120,38 +124,62 @@ impl VerletWorld {
     }
 
     fn resolve_gravity(&mut self) -> &mut Self {
-        let gravity = 6.674;
+        let time = Instant::now();
 
-        for i in 0..self.objects.len() {
-            for j in i..self.objects.len() {
-                if i == j {
-                    continue;
+        let thread_count = 8;
+        let thread_stepping = self.objects.len() / thread_count;
+        let (sender, receiver): 
+            (Sender<Vec<(usize, usize, (f64, f64), (f64, f64))>>, Receiver<Vec<(usize, usize, (f64, f64), (f64, f64))>>) =
+            mpsc::channel();
+
+        for thread_index in 0..thread_count {
+            let mut _objects = self.objects.clone();
+            let _thread_index = thread_index.clone();
+            let _thread_stepping = thread_stepping.clone();
+            let _objects_count = self.objects.len().clone();
+            let _gravity_const = self.gravity_const.clone();
+            let _sender = sender.clone();
+
+            thread::spawn(move || {
+                let mut result: Vec<(usize, usize, (f64, f64), (f64, f64))> = Vec::new();
+
+                for i in _thread_index * _thread_stepping .. _objects_count {
+                    for j in i .. _objects_count {
+                        if i == j {
+                            continue;
+                        }
+
+                        let [object1, object2] = _objects.get_many_mut([i, j]).unwrap();
+
+                        let mut velocity = object1.position.minus(Point::new(object2.position.0, object2.position.1));
+                        let velocity_squared = velocity.length_square();
+                        let force = _gravity_const * ((object1.mass * object2.mass) / velocity_squared);
+                        let acceleration = force / f64::sqrt(velocity_squared);
+
+                        let mut object1_acc = object2.position.minus(Point::new(object1.position.0, object1.position.1)).multiply(acceleration);
+                        let mut object2_acc = object1.position.minus(Point::new(object2.position.0, object2.position.1)).multiply(acceleration);
+
+                        result.push((i, j, object1_acc.as_tupl(), object2_acc.as_tupl()));
+                    }
                 }
 
-                let [object1, object2] = self.objects.get_many_mut([i, j]).unwrap();
-
-                let mut velocity = object1
-                    .position
-                    .minus(Point::new(object2.position.0, object2.position.1));
-                let velocity_squared = velocity.length_square();
-                let force = gravity * ((object1.mass * object2.mass) / velocity_squared);
-                let acceleration = force / f64::sqrt(velocity_squared);
-
-                object1.accelerate(
-                    object2
-                        .position
-                        .minus(Point::new(object1.position.0, object1.position.1))
-                        .multiply(acceleration),
-                );
-
-                object2.accelerate(
-                    object1
-                        .position
-                        .minus(Point::new(object2.position.0, object2.position.1))
-                        .multiply(acceleration),
-                );
-            }
+                _sender.send(result).unwrap();
+            });
         }
+
+        let duration: Duration = time.elapsed();
+        println!("DEBUG: threads spawn gravity time elapsed = {:?}", duration);
+
+        for received in receiver {
+            println!("Received: {}", received.len());
+            // let (object1_index, object2_index, object1_acc, object2_acc) = received;
+            // let [object1, object2] = self.objects.get_many_mut([object1_index, object2_index]).unwrap();
+            // object1.accelerate(Point(object1_acc.0, object1_acc.1));
+            // object2.accelerate(Point(object2_acc.0, object2_acc.1));
+        }
+
+        let duration: Duration = time.elapsed();
+        println!("DEBUG: gravity time elapsed = {:?}", duration);
 
         return self;
     }
@@ -162,35 +190,6 @@ impl VerletWorld {
         for object_index in 0..self.objects.len() {
             let object1 = self.objects.get_mut(object_index).unwrap();
             object1.update(self.dt / self.sub_steps as f64);
-
-            // todo: check how to fix second borrowing error
-            // self.push_to_chunks(object1.position, object_index);
-        }
-    }
-
-    fn push_to_chunks(&mut self, position: Point, object_index: usize) {
-        let (chunk_x, chunk_y) = position_to_chunk_coord(position, self.chunk_size);
-        let chunk_position_in_vec = self
-            .chunks
-            .iter()
-            .position(|ch| ch.x == chunk_x && ch.y == chunk_y);
-
-        if chunk_position_in_vec.is_none() {
-            // create
-            let mut indecies: Vec<i32> = Vec::new();
-            indecies.push(object_index as i32);
-
-            self.chunks.push(Chunk {
-                x: chunk_x,
-                y: chunk_y,
-                indecies: indecies,
-            });
-        } else {
-            // mutate
-            let chunk_pos = chunk_position_in_vec.unwrap();
-            let chunk = self.chunks.get_mut(chunk_pos).unwrap();
-
-            chunk.indecies.push(object_index as i32);
         }
     }
 }
@@ -245,11 +244,4 @@ fn apply_collisions(object1: &mut VerletObject, object2: &mut VerletObject) -> b
     object2.temp = object2.temp + temp_to_obj2 - temp_to_obj1;
 
     return true;
-}
-
-fn position_to_chunk_coord(position: Point, chunk_size: i32) -> (i32, i32) {
-    return (
-        f64::floor(position.0 / f64::from(chunk_size)) as i32,
-        f64::floor(position.1 / f64::from(chunk_size)) as i32,
-    );
 }

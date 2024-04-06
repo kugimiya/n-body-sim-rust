@@ -14,7 +14,7 @@ use winit::{
 const CANVAS_WIDTH: u32 = 1920;
 const CANVAS_HEIGHT: u32 = 1080;
 
-const OBJECTS_COUNT: i32 = 1024;
+const OBJECTS_COUNT: i32 = 1024 * 16;
 const SPAWN_WIDTH_BOUND: f64 = 200.0; // from -x to x
 const SPAWN_HEIGHT_BOUND: f64 = 200.0; // from -y to y
 const OBJECT_INIT_VELOCITY_BOUND: f64 = 0.25; // from -v to v

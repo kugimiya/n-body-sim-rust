@@ -1,6 +1,7 @@
 use super::point::Point;
 use rand::Rng;
 
+#[derive(Copy, Clone)]
 pub struct VerletObject {
     pub position: Point,
     pub position_last: Point,
