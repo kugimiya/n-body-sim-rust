@@ -1,9 +1,5 @@
 use rand::Rng;
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
 use std::time::{Duration, Instant};
-
-use crate::sim_core::dup_thr_pool::DuplexThreadPool;
 
 use super::chunk::Chunk;
 use super::point::Point;
@@ -127,92 +123,30 @@ impl VerletWorld {
 
     fn resolve_gravity(&mut self) -> &mut Self {
         let time = Instant::now();
-        let mut prep_time_ms = 0;
-
-        let thread_count = 8;
-        let mut thread_pool: DuplexThreadPool = DuplexThreadPool::new(thread_count);
 
         for i in 0 .. self.objects_count as usize {
-            let prep_time = Instant::now();
-
-            let mut send_count: usize = 0;
-
-            let mut objects = self.objects.clone();
-            if objects.len() == 0 { continue; }
-            let mut objects = objects.split_at(i);
-            let mut objects = Vec::from(objects.0);
-            if objects.len() == 0 { continue; }
-            let mut objects = objects.split_off(1);
-
-            let object = self.objects.get(i).unwrap().clone();
-            let chunk_size = objects.len() / thread_count as usize;
-
-            if chunk_size == 0 {
-                continue;
-            }
-
-            let chunks: Vec<Vec<VerletObject>> = objects.chunks(chunk_size).map(|chunk| Vec::from(chunk)).collect();
-
-            let prep_duration: Duration = prep_time.elapsed();
-            prep_time_ms += prep_duration.as_nanos();
-
-            for thread_id in 0..thread_count {
-                let chunk = chunks.get(thread_id as usize).unwrap().clone();
-                if chunk.len() < 1 {
+            for j in i .. self.objects_count as usize {
+                if i == j {
                     continue;
                 }
 
-                let sender = thread_pool.slave_senders.get(thread_id as usize).unwrap().clone();
-                sender.send((1, Some((thread_id, object.clone(), i, chunk))));
-                send_count += 1;
-                // println!("DEBUG: send task into #{} for #{}", thread_id, i);
+                let [object1, object2] = self.objects.get_many_mut([i, j]).unwrap();
+
+                let mut velocity = object1.position.minus(Point::new(object2.position.0, object2.position.1));
+                let velocity_squared = velocity.length_square();
+                let force = self.gravity_const * ((object1.mass * object2.mass) / velocity_squared);
+                let acceleration = force / f64::sqrt(velocity_squared);
+
+                let object1_acc = object2.position.minus(Point::new(object1.position.0, object1.position.1)).multiply(acceleration);
+                let object2_acc = object1.position.minus(Point::new(object2.position.0, object2.position.1)).multiply(acceleration);
+
+                object1.accelerate(object1_acc);
+                object2.accelerate(object2_acc);
             }
-
-            for _thread_id in 0..send_count {
-                let response = thread_pool.master_receiver.recv();
-                if !response.is_ok() {
-                    continue;
-                }
-                let (thread_id, object1_acc, results) = &mut response.unwrap();
-
-                let object1 = self.objects.get_mut(i).unwrap();
-                object1.accelerate(Point::new(object1_acc.0, object1_acc.1));
-
-                for result_index in 0..results.len() {
-                    let j = (1 + result_index as i32 + *thread_id * chunk_size as i32) as usize;
-                    let result = results.get_mut(result_index).unwrap();
-                    let object2 = self.objects.get_mut(j).unwrap();
-                    object2.accelerate(Point::new(result.0, result.1));
-                }
-            }
-
-            // ----
-
-            // for j in i .. self.objects_count as usize {
-            //     if i == j {
-            //         continue;
-            //     }
-
-            //     let [object1, object2] = self.objects.get_many_mut([i, j]).unwrap();
-
-            //     let mut velocity = object1.position.minus(Point::new(object2.position.0, object2.position.1));
-            //     let velocity_squared = velocity.length_square();
-            //     let force = self.gravity_const * ((object1.mass * object2.mass) / velocity_squared);
-            //     let acceleration = force / f64::sqrt(velocity_squared);
-
-            //     let object1_acc = object2.position.minus(Point::new(object1.position.0, object1.position.1)).multiply(acceleration);
-            //     let object2_acc = object1.position.minus(Point::new(object2.position.0, object2.position.1)).multiply(acceleration);
-
-            //     object1.accelerate(object1_acc);
-            //     object2.accelerate(object2_acc);
-            // }
         }
 
         let duration: Duration = time.elapsed();
         println!("DEBUG: gravity time elapsed = {:?}", duration);
-        println!("DEBUG: prep_gravity time elapsed = {:?}ms", prep_time_ms / 1000000);
-
-        thread_pool.close_pool();
 
         return self;
     }

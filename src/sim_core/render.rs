@@ -15,11 +15,12 @@ pub struct Renderer {
     pub pixels: Pixels,
     pub drawing: Pixmap,
     pub width: u32,
-    pub height: u32
+    pub height: u32,
+    pub draw_frames_in_output: bool
 }
 
 impl Renderer {
-    pub fn new(width: u32, height: u32, event_loop: &mut EventLoop<()>) -> Renderer {
+    pub fn new(width: u32, height: u32, event_loop: &mut EventLoop<()>, draw_frames_in_output: bool) -> Renderer {
         // let event_loop = EventLoop::new();
         let window = {
             let size = LogicalSize::new(width as f64, height as f64);
@@ -39,7 +40,8 @@ impl Renderer {
             pixels: Pixels::new(width, height, SurfaceTexture::new(window_size.width, window_size.height, &window)).unwrap(),
             window: window,
             width,
-            height
+            height,
+            draw_frames_in_output
         };
     }
 }
@@ -93,9 +95,11 @@ pub fn draw(renderer: &mut Renderer, world: &mut VerletWorld) {
     }
 
     // Save result to file
-    let mut fname = "output/image_".to_owned();
-    fname.push_str(&format!("{:0>8}", world.step.to_string()));
-    fname.push_str(".png");
+    if renderer.draw_frames_in_output {
+        let mut fname = "output/image_".to_owned();
+        fname.push_str(&format!("{:0>8}", world.step.to_string()));
+        fname.push_str(".png");
 
-    renderer.drawing.save_png(String::from(fname)).unwrap();
+        renderer.drawing.save_png(String::from(fname)).unwrap();
+    }
 }

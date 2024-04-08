@@ -14,17 +14,18 @@ use winit::{
 const CANVAS_WIDTH: u32 = 1920;
 const CANVAS_HEIGHT: u32 = 1080;
 
-const OBJECTS_COUNT: i32 = 25000;
+const OBJECTS_COUNT: i32 = 1000;
 const SPAWN_WIDTH_BOUND: f64 = 200.0; // from -x to x
 const SPAWN_HEIGHT_BOUND: f64 = 200.0; // from -y to y
 const OBJECT_INIT_VELOCITY_BOUND: f64 = 0.25; // from -v to v
 const OBJECT_MASS_RANGE: std::ops::Range<f64> = 10.0..20.0;
 const OBJECT_RADIUS_RANGE: std::ops::Range<f64> = 1.0..2.0;
+const DRAW_OUTPUT: bool = false;
 
 fn main() {
     let mut event_loop = EventLoop::new();
     let mut world = VerletWorld::new(OBJECTS_COUNT);
-    let mut renderer = Renderer::new(CANVAS_WIDTH, CANVAS_HEIGHT, &mut event_loop);
+    let mut renderer = Renderer::new(CANVAS_WIDTH, CANVAS_HEIGHT, &mut event_loop, DRAW_OUTPUT);
 
     world.fill(SPAWN_WIDTH_BOUND, SPAWN_HEIGHT_BOUND, OBJECT_INIT_VELOCITY_BOUND, OBJECT_MASS_RANGE, OBJECT_RADIUS_RANGE);
     event_loop.run(move |event, _, control_flow| {
