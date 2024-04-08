@@ -12,6 +12,7 @@ pub struct VerletWorld {
     pub objects_count: i32,
     pub step: i32,
     pub chunk_size: i32,
+    pub costraint_radius: f64,
 
     pub objects: Vec<VerletObject>,
     pub chunks: Vec<Chunk>,
@@ -23,13 +24,14 @@ pub struct VerletWorld {
 }
 
 impl VerletWorld {
-    pub fn new(objects_count: i32) -> VerletWorld {
+    pub fn new(objects_count: i32, costraint_radius: f64) -> VerletWorld {
         VerletWorld {
             dt: 0.01,
             gravity_const: 6.674,
             sub_steps: 8,
             objects_count: objects_count,
             chunk_size: 24,
+            costraint_radius,
             objects: Vec::new(),
             chunks: Vec::new(),
 
@@ -84,14 +86,34 @@ impl VerletWorld {
                 (self.cur_collision_resolve_duration + duration) / 2.0;
         }
 
-        self.update_chunk_size().resolve_gravity().update_objects();
+        self.update_chunk_size();
+        self.resolve_gravity();
+        self.apply_constraints();
+        self.update_objects();
 
         let duration: Duration = time.elapsed();
-        if duration.as_millis() >= 16 {
+        if duration.as_millis() >= 12 {
             self.fill_allowed = false;
         }
 
         println!("INFO: step={}, chunk_size={}, object_count={}, frame_time={:?}", self.step, self.chunk_size, self.objects.len(), duration);
+        return self;
+    }
+
+    pub fn apply_constraints(&mut self) -> &mut Self {
+        let mut contraint_center = Point::new(0.0, 0.0);
+
+        for object in self.objects.iter_mut() {
+            let mut velocity = contraint_center.minus(object.position);
+            let distance = velocity.length();
+
+            if distance > self.costraint_radius - object.radius {
+                let mut diff = velocity.divide(distance);
+                object.position_last = object.position.clone();
+                object.position = contraint_center.minus(diff.multiply(self.costraint_radius - object.radius));
+            }
+        }
+
         return self;
     }
 

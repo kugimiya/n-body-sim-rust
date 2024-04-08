@@ -10,6 +10,10 @@ impl Point {
         return self.0 * self.0 + self.1 * self.1;
     }
 
+    pub fn length(&mut self) -> f64 {
+        return f64::sqrt(self.length_square());
+    }
+
     pub fn plus(&mut self, v2: Point) -> Point {
         return Point(self.0 + v2.0, self.1 + v2.1);
     }
