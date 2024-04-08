@@ -18,6 +18,8 @@ pub struct VerletWorld {
 
     pub cur_collision_resolve_duration: f64,
     pub last_collision_resolve_duration: f64,
+
+    pub fill_allowed: bool,
 }
 
 impl VerletWorld {
@@ -34,6 +36,8 @@ impl VerletWorld {
             step: 0,
             cur_collision_resolve_duration: 0.0,
             last_collision_resolve_duration: 0.0,
+
+            fill_allowed: true,
         }
     }
 
@@ -45,6 +49,10 @@ impl VerletWorld {
         mass_range: std::ops::Range<f64>,
         radius_range: std::ops::Range<f64>,
     ) -> &mut Self {
+        if !self.fill_allowed {
+            return self;
+        }
+
         let mut rnd = rand::thread_rng();
 
         for _step in 0..self.objects_count {
@@ -52,6 +60,7 @@ impl VerletWorld {
                 rnd.gen_range(-1.0 * width_bound..width_bound),
                 rnd.gen_range(-1.0 * height_bound..height_bound),
             );
+
             self.objects.push(VerletObject::new(
                 position.0,
                 position.1,
@@ -65,8 +74,8 @@ impl VerletWorld {
     }
 
     pub fn update(&mut self) -> &mut Self {
+        let time = Instant::now();
         self.step += 1;
-        println!("INFO: step={}, chunk_size={}", self.step, self.chunk_size);
 
         for _step in 0..self.sub_steps {
             let duration = self.resolve_collisions();
@@ -77,6 +86,12 @@ impl VerletWorld {
 
         self.update_chunk_size().resolve_gravity().update_objects();
 
+        let duration: Duration = time.elapsed();
+        if duration.as_millis() >= 16 {
+            self.fill_allowed = false;
+        }
+
+        println!("INFO: step={}, chunk_size={}, object_count={}, frame_time={:?}", self.step, self.chunk_size, self.objects.len(), duration);
         return self;
     }
 
@@ -122,10 +137,10 @@ impl VerletWorld {
     }
 
     fn resolve_gravity(&mut self) -> &mut Self {
-        let time = Instant::now();
+        // let time = Instant::now();
 
-        for i in 0 .. self.objects_count as usize {
-            for j in i .. self.objects_count as usize {
+        for i in 0 .. self.objects.len() as usize {
+            for j in i .. self.objects.len() as usize {
                 if i == j {
                     continue;
                 }
@@ -145,8 +160,8 @@ impl VerletWorld {
             }
         }
 
-        let duration: Duration = time.elapsed();
-        println!("DEBUG: gravity time elapsed = {:?}", duration);
+        // let duration: Duration = time.elapsed();
+        // println!("DEBUG: gravity_time={:?}", duration);
 
         return self;
     }
@@ -157,6 +172,8 @@ impl VerletWorld {
         for object_index in 0..self.objects.len() {
             let object1 = self.objects.get_mut(object_index).unwrap();
             object1.update(self.dt / self.sub_steps as f64);
+            object1.update_friction();
+            object1.temp_fix();
         }
     }
 }

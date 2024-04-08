@@ -9,6 +9,7 @@ pub struct VerletObject {
     pub mass: f64,
     pub radius: f64,
     pub temp: f64,
+    pub friction_factor: f64
 }
 
 impl VerletObject {
@@ -33,6 +34,7 @@ impl VerletObject {
             mass: mass,
             radius: radius,
             temp: 0.0,
+            friction_factor: 0.0085,
         }
     }
 
@@ -49,22 +51,21 @@ impl VerletObject {
             .plus(velocity.plus(self.acceleration.multiply(dt * dt)));
 
         self.acceleration = Point::new(0.0, 0.0);
+    }
 
-        // implementation of friction :^)
-        // fixme: remove?
-        velocity = self.position.minus(self.position_last.clone());
+    pub fn update_friction(&mut self) {
+        let mut velocity = self.position.minus(self.position_last.clone());
         let velocity_length = f64::sqrt(velocity.length_square());
-        let friction_factor = 0.0085;
-        self.position_last = self
-            .position_last
-            .plus(velocity.multiply(velocity_length * friction_factor));
+        self.position_last = self.position_last.plus(velocity.multiply(velocity_length * self.friction_factor));
+    }
 
-        // implementation of temperature fixer :^)
-        // fixme: remove?
+    pub fn temp_fix(&mut self) {
         self.temp -= self.temp * 0.00005;
+
         if self.temp < 0.0 {
             self.temp = 0.0;
         }
+
         if self.temp > 50000.0 {
             self.temp = 1_000.0;
         }
