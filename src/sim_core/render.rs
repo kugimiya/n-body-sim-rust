@@ -63,7 +63,7 @@ pub fn draw(renderer: &mut Renderer, world: &mut VerletWorld) {
     // Draw chunks
     for chunk in world.chunks.iter() {
         let mut paint = Paint::default();
-        paint.set_color_rgba8(0, 0, 255, 15);
+        paint.set_color_rgba8(0, 0, 255, 10);
         paint.anti_alias = false;
 
         let rect_result = Rect::from_xywh(center_x + (chunk.x * world.chunk_size) as f32, center_y + (chunk.y * world.chunk_size) as f32, world.chunk_size as f32, world.chunk_size as f32);
@@ -76,10 +76,10 @@ pub fn draw(renderer: &mut Renderer, world: &mut VerletWorld) {
     let mut index = 0;
     for object in world.objects.iter_mut() {
         let mut paint = Paint::default();
-        paint.set_color_rgba8(object.temp as u8, 255 - object.temp as u8, object.temp as u8, 255);
+        paint.set_color_rgba8(object.temp as u8, 255 - object.temp as u8, object.temp as u8, 230);
         paint.anti_alias = false;
 
-        let rect_result = Rect::from_xywh(center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32, object.radius as f32);
+        let rect_result = Rect::from_xywh(center_x + object.position.0 as f32 - (object.radius / 2.0) as f32, center_y + object.position.1 as f32 - (object.radius / 2.0) as f32, object.radius as f32, object.radius as f32);
 
         if !rect_result.is_none() {
             renderer.drawing.fill_rect(rect_result.unwrap(), &paint, Transform::identity(), None);
@@ -88,7 +88,7 @@ pub fn draw(renderer: &mut Renderer, world: &mut VerletWorld) {
             println!("INFO: Object data: i={}, x={}, y={}, t={}, r={}", index, object.position.0, object.position.1, object.temp, object.radius);
             println!("INFO: Calculated to Rect: x={}, y={}, w={}, h={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32, object.radius as f32);
             println!("INFO: Calculated in Rect: l={}, t={}, r={}, b={}", center_x + object.position.0 as f32, center_y + object.position.1 as f32, object.radius as f32 + center_x + object.position.0 as f32, object.radius as f32 + center_y + object.position.1 as f32);
-            return;
+            continue;
         }
 
         index += 1;

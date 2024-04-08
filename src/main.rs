@@ -14,18 +14,19 @@ use winit::{
 const CANVAS_WIDTH: u32 = 1920;
 const CANVAS_HEIGHT: u32 = 1080;
 
-const OBJECTS_COUNT: i32 = 25;
-const WORLD_RADIUS: f64 = 5000.0;
-const SPAWN_WIDTH_BOUND: f64 = 600.0; // from -x to x
-const SPAWN_HEIGHT_BOUND: f64 = 600.0; // from -y to y
+const OBJECTS_COUNT: i32 = 10;
+const WORLD_RADIUS: f64 = 1080.0 / 2.0;
+const SPAWN_WIDTH_BOUND: f64 = 10.0; // from -x to x
+const SPAWN_HEIGHT_BOUND: f64 = 10.0; // from -y to y
 const OBJECT_INIT_VELOCITY_BOUND: f64 = 0.25; // from -v to v
-const OBJECT_MASS_RANGE: std::ops::Range<f64> = 100.0..200.0;
-const OBJECT_RADIUS_RANGE: std::ops::Range<f64> = 1.0..2.0;
+const OBJECT_MASS_RANGE: std::ops::Range<f64> = 1.0..50.0;
+const OBJECT_RADIUS_RANGE: std::ops::Range<f64> = 0.01..2.0;
 const DRAW_OUTPUT: bool = false;
+const MAX_FRAME_TIME_MS: i32 = 13; // will spawn objects until frame time wont fit
 
 fn main() {
     let mut event_loop = EventLoop::new();
-    let mut world = VerletWorld::new(OBJECTS_COUNT, WORLD_RADIUS);
+    let mut world = VerletWorld::new(OBJECTS_COUNT, WORLD_RADIUS, MAX_FRAME_TIME_MS);
     let mut renderer = Renderer::new(CANVAS_WIDTH, CANVAS_HEIGHT, &mut event_loop, DRAW_OUTPUT);
 
     world.fill(SPAWN_WIDTH_BOUND, SPAWN_HEIGHT_BOUND, OBJECT_INIT_VELOCITY_BOUND, OBJECT_MASS_RANGE, OBJECT_RADIUS_RANGE);
