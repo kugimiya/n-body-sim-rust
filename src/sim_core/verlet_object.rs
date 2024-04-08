@@ -60,14 +60,18 @@ impl VerletObject {
     }
 
     pub fn temp_fix(&mut self) {
+        if !self.temp.is_normal() {
+            self.temp = 500_000.0;
+        }
+
         self.temp -= self.temp * 0.00005;
 
         if self.temp < 0.0 {
             self.temp = 0.0;
         }
 
-        if self.temp > 50000.0 {
-            self.temp = 1_000.0;
+        if self.temp > 500_000.0 {
+            self.temp = 500_000.0;
         }
     }
 }

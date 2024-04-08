@@ -112,6 +112,27 @@ impl VerletWorld {
                 object.position_last = object.position.clone();
                 object.position = contraint_center.minus(diff.multiply(self.costraint_radius - object.radius));
             }
+
+            // so, box :^)
+            if object.position.0 > self.costraint_radius * 2.0 {
+                object.position.0 = self.costraint_radius;
+                object.position_last.0 = self.costraint_radius;
+            }
+        
+            if object.position.1 > self.costraint_radius * 2.0 {
+                object.position.1 = self.costraint_radius;
+                object.position_last.1 = self.costraint_radius;
+            }
+        
+            if object.position.0 < self.costraint_radius * -2.0 {
+                object.position.0 = self.costraint_radius * -1.0;
+                object.position_last.0 = self.costraint_radius * -1.0;
+            }
+        
+            if object.position.1 < self.costraint_radius * -2.0 {
+                object.position.1 = self.costraint_radius * -1.0;
+                object.position_last.1 = self.costraint_radius * -1.0;
+            }
         }
 
         return self;
@@ -191,11 +212,19 @@ impl VerletWorld {
     fn update_objects(&mut self) {
         self.chunks.clear();
 
-        for object_index in 0..self.objects.len() {
-            let object1 = self.objects.get_mut(object_index).unwrap();
-            object1.update(self.dt / self.sub_steps as f64);
-            object1.update_friction();
-            object1.temp_fix();
+        for object in self.objects.iter_mut() {
+            // hot fix irrational acceleration
+            if !object.acceleration.0.is_normal() {
+                object.acceleration.0 = 0.0;
+            }
+
+            if !object.acceleration.1.is_normal() {
+                object.acceleration.1 = 0.0;
+            }
+
+            object.update(self.dt / self.sub_steps as f64);
+            object.update_friction();
+            object.temp_fix();
         }
     }
 }
@@ -228,6 +257,17 @@ fn apply_collisions(object1: &mut VerletObject, object2: &mut VerletObject) -> b
     object2.position = object2
         .position
         .plus(diff.multiply(object1_mass_ratio * delta).divide(2.0));
+
+    // hot fix for irrational value
+    if !object1.position.0.is_normal() || !object1.position.1.is_normal() {
+        object1.position = Point::new(0.0, 0.0);
+        object1.position_last = object1.position.clone();
+    }
+
+    if !object2.position.0.is_normal() || !object2.position.1.is_normal() {
+        object2.position = Point::new(0.0, 0.0);
+        object2.position_last = object2.position.clone();
+    }
 
     // implementation of temperature
     // fixme: remove?
