@@ -21,17 +21,17 @@ pub struct VerletWorld {
     pub last_collision_resolve_duration: f64,
 
     pub fill_allowed: bool,
-    pub max_frame_time: i32,
+    pub max_objects_count: i32,
 }
 
 impl VerletWorld {
-    pub fn new(objects_count: i32, costraint_radius: f64, max_frame_time: i32) -> VerletWorld {
+    pub fn new(objects_count: i32, costraint_radius: f64, max_objects_count: i32) -> VerletWorld {
         VerletWorld {
             dt: 0.01,
             gravity_const: 6.674,
-            sub_steps: 8,
+            sub_steps: 10,
             objects_generate_count: objects_count,
-            chunk_size: 10,
+            chunk_size: 20,
             costraint_radius,
             objects: Vec::new(),
             chunks: Vec::new(),
@@ -41,7 +41,7 @@ impl VerletWorld {
             last_collision_resolve_duration: 0.0,
 
             fill_allowed: true,
-            max_frame_time,
+            max_objects_count,
         }
     }
 
@@ -52,6 +52,7 @@ impl VerletWorld {
         init_velocity_bound: f64,
         mass_range: std::ops::Range<f64>,
         radius_range: std::ops::Range<f64>,
+        circled: bool
     ) -> &mut Self {
         if !self.fill_allowed {
             return self;
@@ -59,19 +60,36 @@ impl VerletWorld {
 
         let mut rnd = rand::thread_rng();
 
-        for _step in 0..self.objects_generate_count {
-            let position = (
-                rnd.gen_range(-1.0 * width_bound..width_bound),
-                rnd.gen_range(-1.0 * height_bound..height_bound),
-            );
+        if circled {
+            for _step in 1..self.objects_generate_count {
+                let position = (
+                    rnd.gen_range(-1.0 * width_bound .. width_bound) * f64::cos((_step as f64) / 1000.0),
+                    rnd.gen_range(-1.0 * width_bound .. width_bound) * f64::sin((_step as f64) / 1000.0),
+                );
 
-            self.objects.push(VerletObject::new(
-                position.0,
-                position.1,
-                rnd.gen_range(mass_range.clone()),
-                rnd.gen_range(radius_range.clone()),
-                init_velocity_bound,
-            ));
+                self.objects.push(VerletObject::new(
+                    position.0,
+                    position.1,
+                    rnd.gen_range(mass_range.clone()),
+                    rnd.gen_range(radius_range.clone()),
+                    f64::abs(100.0 * f64::cos(_step as f64 + 0.001)),
+                ));
+            }
+        } else {
+            for _step in 0..self.objects_generate_count {
+                let position = (
+                    rnd.gen_range(-1.0 * width_bound..width_bound),
+                    rnd.gen_range(-1.0 * height_bound..height_bound),
+                );
+
+                self.objects.push(VerletObject::new(
+                    position.0,
+                    position.1,
+                    rnd.gen_range(mass_range.clone()),
+                    rnd.gen_range(radius_range.clone()),
+                    init_velocity_bound,
+                ));
+            }
         }
 
         return self;
@@ -81,26 +99,27 @@ impl VerletWorld {
         let time = Instant::now();
         self.step += 1;
 
+        self.update_chunk_size();
+
         for _step in 0..self.sub_steps {
             let duration = self.resolve_collisions();
             self.update_objects();
-            self.cur_collision_resolve_duration =
-                (self.cur_collision_resolve_duration + duration) / 2.0;
+            self.cur_collision_resolve_duration = (self.cur_collision_resolve_duration + duration) / 2.0;
         }
 
-        self.update_chunk_size();
         self.resolve_gravity();
         self.apply_constraints();
-        self.update_objects();
 
         let duration: Duration = time.elapsed();
-        if duration.as_millis() >= self.max_frame_time as u128 {
+        if self.objects.len() >= self.max_objects_count as usize {
             self.fill_allowed = false;
         } else {
             self.fill_allowed = true;
         }
 
-        println!("INFO: step={}, chunk_size={}, object_count={}, frame_time={:?}", self.step, self.chunk_size, self.objects.len(), duration);
+        self.update_objects();
+
+        println!("INFO: step={}, chunk_size={}, chunk_count={}, object_count={}, frame_time={:?}", self.step, self.chunk_size, self.chunks.len(), self.objects.len(), duration);
         return self;
     }
 
@@ -151,8 +170,8 @@ impl VerletWorld {
             self.chunk_size = self.chunk_size - 2;
         }
 
-        if self.chunk_size < 4 {
-            self.chunk_size = 4;
+        if self.chunk_size < 2 {
+            self.chunk_size = 2;
         }
 
         if self.chunk_size > 48 {
@@ -233,6 +252,52 @@ impl VerletWorld {
     }
 
     fn resolve_gravity(&mut self) -> &mut Self {
+        for chunk_index_i in 0 .. self.chunks.len() {
+            for chunk_index_j in chunk_index_i .. self.chunks.len() {
+                if chunk_index_i == chunk_index_j {
+                    continue;
+                }
+
+                let [chunk1, chunk2] = self.chunks.get_many_mut([chunk_index_i, chunk_index_j]).unwrap();
+                for object1_index in chunk1.indecies.iter() {
+                    let object1 = self.objects.get_mut(*object1_index as usize).unwrap();
+
+                    let mut velocity = object1.position.minus(chunk2.mass_center);
+                    let velocity_squared = velocity.length_square();
+                    let force = self.gravity_const * ((object1.mass * chunk2.mass) / velocity_squared);
+                    let acceleration = force / f64::sqrt(velocity_squared);
+                    let object_acc = Point::new(chunk2.mass_center.0, chunk2.mass_center.1).minus(Point::new(object1.position.0, object1.position.1)).multiply(acceleration);
+                    object1.accelerate(object_acc);
+                }
+            }
+
+            let chunk = self.chunks.get(chunk_index_i).unwrap();
+            for i in 0 .. chunk.indecies.len() {
+                for j in i .. chunk.indecies.len() {
+                    if i == j {
+                        continue;
+                    }
+
+                    let [object1, object2] = self.objects.get_many_mut([i, j]).unwrap();
+
+                    let mut velocity = object1.position.minus(Point::new(object2.position.0, object2.position.1));
+                    let velocity_squared = velocity.length_square();
+                    let force = self.gravity_const * ((object1.mass * object2.mass) / velocity_squared);
+                    let acceleration = force / f64::sqrt(velocity_squared);
+    
+                    let object1_acc = object2.position.minus(Point::new(object1.position.0, object1.position.1)).multiply(acceleration);
+                    let object2_acc = object1.position.minus(Point::new(object2.position.0, object2.position.1)).multiply(acceleration);
+    
+                    object1.accelerate(object1_acc);
+                    object2.accelerate(object2_acc);
+                }
+            }
+        }
+
+        return self;
+    }
+
+    fn resolve_gravity_bruteforce(&mut self) -> &mut Self {
         for i in 0 .. self.objects.len() as usize {
             for j in i .. self.objects.len() as usize {
                 if i == j {

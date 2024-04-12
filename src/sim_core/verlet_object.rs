@@ -25,16 +25,14 @@ impl VerletObject {
         VerletObject {
             position: Point::new(x, y),
             position_last: Point::new(
-                x + rnd
-                    .gen_range(-1.0 * initial_velocity_range_bounds..initial_velocity_range_bounds),
-                y + rnd
-                    .gen_range(-1.0 * initial_velocity_range_bounds..initial_velocity_range_bounds),
+                x + rnd.gen_range(-1.0 * initial_velocity_range_bounds .. initial_velocity_range_bounds),
+                y + rnd.gen_range(-1.0 * initial_velocity_range_bounds .. initial_velocity_range_bounds),
             ),
             acceleration: Point::new(0.0, 0.0),
             mass: mass,
             radius: radius,
             temp: 0.0,
-            friction_factor: 0.0085,
+            friction_factor: 0.0025,
         }
     }
 
